@@ -1,0 +1,22 @@
+{
+  "name": "flowww-operations",
+  "version": "1.0.0",
+  "description": "Lambda that will authenticate and change to the correct center to handle requests in flowww",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "publish": "rm -rf node_modules package-lock.json && npm install --production && zip -r flowww-operations.zip . && aws s3 cp flowww-operations.zip s3://flowww-operations-bucket-2/flowww-operations.zip --profile personal --region eu-west-3 && aws lambda update-function-code --profile personal --region eu-west-3 --function-name flowww-operations --s3-bucket flowww-operations-bucket-2 --s3-key flowww-operations.zip"
+  },
+  "dependencies": {
+    "@sparticuz/chromium": "^141.0.0",
+    "fast-xml-parser": "^5.3.0",
+    "puppeteer-core": "^24.24.0",
+    "qs": "^6.14.0"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "dotenv": "^17.2.3",
+    "puppeteer": "^24.24.0"
+  }
+}
