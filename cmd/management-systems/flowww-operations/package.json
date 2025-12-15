@@ -2,7 +2,7 @@
   "name": "flowww-operations",
   "version": "1.0.0",
   "description": "Lambda that will authenticate and change to the correct center to handle requests in flowww",
-  "main": "index.js",
+  "main": "lambda.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "publish": "rm -rf node_modules package-lock.json && npm install --production && zip -r flowww-operations.zip . && aws s3 cp flowww-operations.zip s3://flowww-operations-bucket-2/flowww-operations.zip --profile personal --region eu-west-3 && aws lambda update-function-code --profile personal --region eu-west-3 --function-name flowww-operations --s3-bucket flowww-operations-bucket-2 --s3-key flowww-operations.zip"

@@ -26,8 +26,18 @@ const LOGIN_REQUEST = {
     password_input_field:  'input[name="SEC_LOGIN_FORM_2"]',
     submit_button: 'flw-button'
 }
+
+const APPOINTMENT_CONFIRMATION_REQUEST_BODY = {
+    'frm': 'SEC_APP_TAG_SAVE_FORM',
+    'SEC_APP_TAG_SAVE_FORM_1':{
+        "TagId": "1",
+        "TagChecked":"-1"
+    }
+}
+
 module.exports = {
     REQUESTS_HEADERS,
     AGENDA_REQUEST_BODY,
-    LOGIN_REQUEST
+    LOGIN_REQUEST,
+    APPOINTMENT_CONFIRMATION_REQUEST_BODY
 };
