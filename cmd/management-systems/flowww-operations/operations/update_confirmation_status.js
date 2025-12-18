@@ -20,6 +20,7 @@ const navigateToAgendaModule = async () => {
             agendaButton.click();
         });
         console.log("✅ Módulo de agenda abierto");
+        await page.reload();
     }catch (error) {
         console.error(`❌ Error al navegar al módulo de agenda: ${error.message}`);
         throw error;
@@ -57,7 +58,7 @@ const loadAppointment = async (appointmentId) => {
     const page = apiConfig.page;
     try {
         const selector = `div[diaryid="${appointmentId}"]`;
-        await page.waitForSelector(selector);
+        await page.waitForSelector(selector, { timeout: 90000 });
         await page.click(selector, { clickCount: 2 });
         console.log(`✅ Cita ${appointmentId} abierta`);
 
@@ -74,9 +75,9 @@ const clickConfirmAppointmentButton = async () => {
         await page.evaluate(async ()=>{
             const tagsButton = document.querySelector('button#btnTagsColors');
             tagsButton.click();
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 7500));
             const confirmAppointmentButton = document.querySelector('li[style="background-color: rgb(76, 175, 80);"] label input');
-            if(confirmAppointmentButton.checked) return;
+            if (confirmAppointmentButton.checked) return;
             console.log("✅ Confirmando cita...");
             confirmAppointmentButton.click();
         })

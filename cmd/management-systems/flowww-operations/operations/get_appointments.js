@@ -7,12 +7,12 @@ async function changeCenter(page, centerId) {
   try {
     // Esperar a que aparezcan los elementos
     await page.waitForSelector('flw-clinic-item');
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 7500));
     await page.evaluate(() => 
       {
         document.querySelector('flw-clinic-item').shadowRoot.querySelector('.clinic-item').click();
       });
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 7500));
     await page.evaluate((centerId) =>{
       const clinicItems = document.querySelectorAll('flw-clinic-item');
       let centerItem = null;
