@@ -1,46 +1,154 @@
-package systems
+package flowww
 
-import "appointment-system/internal/appointments"
+import (
+	"appointment-system/internal/domain"
+	"context"
+	"encoding/json"
+	"fmt"
 
-var FlowwwHeaders = map[string]string{
-	"Accept":             "*/*",
-	"Accept-Language":    "es-ES,es;q=0.6",
-	"Connection":         "keep-alive",
-	"Content-Type":       "application/x-www-form-urlencoded",
-	"FLOWww-SessionID":   "",
-	"Origin":             "https://eu062.flowww.net",
-	"Referer":            "https://eu062.flowww.net/sinvello/flowww.asp",
-	"Sec-Fetch-Dest":     "empty",
-	"Sec-Fetch-Mode":     "cors",
-	"Sec-Fetch-Site":     "same-origin",
-	"Sec-GPC":            "1",
-	"User-Agent":         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-	"sec-ch-ua":          `"Brave";v="137", "Chromium";v="137", "Not/A)Brand";v="24"`,
-	"sec-ch-ua-mobile":   "?0",
-	"sec-ch-ua-platform": "macOS",
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+)
+
+type ILambdaInvoker interface {
+	Invoke(ctx context.Context, params *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
+	InvokeAsync(ctx context.Context, params *lambda.InvokeAsyncInput, optFns ...func(*lambda.Options)) (*lambda.InvokeAsyncOutput, error)
 }
 
 type FlowwwClient struct {
-	Cookies string
+	invoker      ILambdaInvoker
+	functionName string
 }
 
-func NewFlowwwClient(cookies string) *FlowwwClient {
+func NewFlowwwClient(invoker ILambdaInvoker, functionName string) *FlowwwClient {
 	return &FlowwwClient{
-		Cookies: cookies,
+		invoker:      invoker,
+		functionName: functionName,
 	}
 }
 
-func (c *FlowwwClient) GetAvailableAppointments(centerId string, daysAhead int) ([]models.Appointment, error) {
-	// Implementation to fetch available appointments from Flowww system
-	return nil, nil
+// TODO: IMPROVE ABSTRACTING INVOKE LOGIC INTO A FUNCTION
+
+func (c *FlowwwClient) ListAppointments(
+	ctx context.Context,
+	centerId string,
+) (*[]FlowwwAppointmentDTO, error) {
+	const op = "FlowwwClient.ListAppointments"
+	req := ListAppointmentsRequest{
+		Operation: "get-appointments",
+		CenterId:  centerId,
+	}
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return &[]FlowwwAppointmentDTO{}, domain.E(op, domain.ErrInternal, err)
+	}
+
+	out, err := c.invoker.Invoke(
+		ctx,
+		&lambda.InvokeInput{
+			FunctionName: &c.functionName,
+			Payload:      payload,
+		},
+	)
+
+	// Error invoking Lambda, AWS error
+	if err != nil {
+		return &[]FlowwwAppointmentDTO{}, domain.E(op, domain.ErrTransient, err)
+	}
+
+	// Error while executing the function
+	if out.FunctionError != nil {
+		return &[]FlowwwAppointmentDTO{}, domain.E(op, domain.ErrInternal, fmt.Errorf("Flowww Operations Error: %s", *out.FunctionError))
+	}
+
+	envelope, err := decodeEnvelope(out.Payload)
+	if err != nil {
+		return &[]FlowwwAppointmentDTO{}, domain.E(op, domain.ErrInternal, err)
+	}
+
+	if !envelope.Ok && envelope.Error != nil {
+		return &[]FlowwwAppointmentDTO{}, c.mapFlowwwError(op, *envelope.Error)
+	}
+
+	var appointments []FlowwwAppointmentDTO
+	if err = json.Unmarshal(envelope.Data, &appointments); err != nil {
+		return &[]FlowwwAppointmentDTO{}, domain.E(op, domain.ErrInternal, err)
+	}
+
+	return &appointments, nil
 }
 
-func (c *FlowwwClient) ConfirmAppointment(appointmentId string) error {
-	// Implementation to confirm an appointment in Flowww system
+func (c *FlowwwClient) UpdateConfirmation(
+	ctx context.Context,
+	confirmationStatus bool,
+	centerId, appointmentId, appointmentDate string,
+) error {
+	const op = "FlowwwClient.UpdateConfirmation"
+	req := UpdateConfirmationRequest{
+		Operation:          "confirmation-response",
+		CenterId:           centerId,
+		AppointmentId:      appointmentId,
+		AppointmentDate:    appointmentDate,
+		ConfirmationStatus: confirmationStatus,
+	}
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	out, err := c.invoker.Invoke(
+		ctx,
+		&lambda.InvokeInput{
+			FunctionName: &c.functionName,
+			Payload:      payload,
+		},
+	)
+
+	// Error invoking Lambda, AWS error
+	if err != nil {
+		return domain.E(op, domain.ErrTransient, err)
+	}
+
+	// Error while executing the function
+	if out.FunctionError != nil {
+		return domain.E(op, domain.ErrInternal, fmt.Errorf("Flowww Operations Error: %s", *out.FunctionError))
+	}
+
+	envelope, err := decodeEnvelope(out.Payload)
+	if err != nil {
+		return domain.E(op, domain.ErrInternal, err)
+	}
+
+	if !envelope.Ok && envelope.Error != nil {
+		return c.mapFlowwwError(op, *envelope.Error)
+	}
+
+	var data UpdateConfirmationData
+	if err := json.Unmarshal(envelope.Data, &data); err != nil {
+		return domain.E(op, domain.ErrInternal, err)
+	}
+
 	return nil
 }
 
-func (c *FlowwwClient) CancelAppointment(appointmentId string) error {
-	// Implementation to cancel an appointment in Flowww system
-	return nil
+func (c *FlowwwClient) mapFlowwwError(op string, flowwwErr FlowwwErrorDTO) error {
+	cause := fmt.Errorf("%s: %s", flowwwErr.Code, flowwwErr.Message)
+
+	switch flowwwErr.Kind {
+	case "TRANSIENT":
+		return domain.E(op, domain.ErrTransient, cause)
+
+	case "RATE_LIMITED":
+		return domain.E(op, domain.ErrRateLimited, cause)
+
+	case "UNAUTHORIZED":
+		return domain.E(op, domain.ErrUnauthorized, cause)
+
+	case "INVALID_INPUT":
+		return domain.E(op, domain.ErrInvalidInput, cause)
+
+	default:
+		return domain.E(op, domain.ErrInternal, cause)
+	}
 }

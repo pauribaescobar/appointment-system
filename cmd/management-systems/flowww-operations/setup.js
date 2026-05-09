@@ -8,11 +8,15 @@ const parser = new XMLParser({
     attributeNamePrefix: "@_", // Así se distinguen atributos de valores
     parseTagValue: false, // Mantiene los valores como texto
     parseAttributeValue: false, // Evita convertir números a number
-    htmlEntities: true // Decodifica cosas como &#186;
+    htmlEntities: true, // Decodifica cosas como &#186;
+    processEntities: {
+        enabled: true,
+        maxTotalExpansions: 10000,
+    },
 });
 
 const apiConfig = {
-    headers:null,
+    headers: null,
     baseRequestUrl: null,
     browser: null,
     page: null
@@ -20,45 +24,43 @@ const apiConfig = {
 
 async function Login(page) {
     // 1. Abrir login y completar credenciales
-  await page.goto(process.env.FLOWWW_LOGIN_URL, { waitUntil: 'networkidle2' });
-  await page.type(LOGIN_REQUEST.username_input_field, process.env.FLOWWW_USERNAME);
-  await page.type(LOGIN_REQUEST.password_input_field, process.env.FLOWWW_PASSWORD);
-  // 2. Enviar formulario y esperar navegación
-  page.click(LOGIN_REQUEST.submit_button),
-  await Promise.race([
-    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 100000 }),
-    page.waitForSelector("#selected-clinic-container", { timeout: 100000 })
-  ]);
-  console.log("✅ Login realizado");
+    await page.goto(process.env.FLOWWW_LOGIN_URL, { waitUntil: 'networkidle2' });
+    await page.type(LOGIN_REQUEST.username_input_field, process.env.FLOWWW_USERNAME);
+    await page.type(LOGIN_REQUEST.password_input_field, process.env.FLOWWW_PASSWORD);
+    // 2. Enviar formulario y esperar navegación
+    await Promise.all([
+        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 100000 }),
+        page.click(LOGIN_REQUEST.submit_button),
+    ]);
+    console.log("✅ Login realizado");
 }
 
 const setupBrowser = async () => {
     const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+    const chromium = require('@sparticuz/chromium');
+    const puppeteer = require('puppeteer-core');
     let browser;
-    if (isLambda) {
-        const chromium = require('@sparticuz/chromium');
-        const puppeteer = require('puppeteer-core');
 
-        const executablePath = await chromium.executablePath();
-        browser = await puppeteer.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
-            executablePath: executablePath,
-            headless: chromium.headless,
-        });
+    let executablePath;
+    if (isLambda) {
+        executablePath = await chromium.executablePath();
     } else {
-        const puppeteer = require('puppeteer');
-        browser = await puppeteer.launch({
-            headless: true,
-        });
         require('dotenv').config();
+        executablePath = require('puppeteer').executablePath();
     }
+
+    browser = await puppeteer.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: executablePath,
+        headless: chromium.headless,
+    });
 
     console.log(`✅ Navegador configurado. Entorno Lambda: ${isLambda}`);
     return browser;
 }
 
-const setupFlowwwConnection  = async () => {
+const setupFlowwwConnection = async () => {
     const browser = await setupBrowser();
     const page = await browser.newPage();
     page.on('dialog', async dialog => {
@@ -66,9 +68,16 @@ const setupFlowwwConnection  = async () => {
         await new Promise(r => setTimeout(r, 500));
         await dialog.accept();
     });
-    await Login(page);
+    try {
+        await Login(page);
+    } catch (err) {
+        throw new Error(`Error during FLOWww login: ${err.message}`);
+    }
+
     const headers = await getRequestHeaders(page);
-    const baseRequestUrl = (page.url().split('/flowww.asp')[0])+'/cgi-bin/dllrequest.asp';
+    const currentUrl = new URL(page.url());
+    const basePath = currentUrl.pathname.substring(0, currentUrl.pathname.lastIndexOf('/'));
+    const baseRequestUrl = `${currentUrl.origin}${basePath}/cgi-bin/dllrequest.asp`;
     apiConfig.browser = browser;
     apiConfig.page = page;
     apiConfig.headers = headers;
@@ -79,7 +88,7 @@ async function getRequestHeaders(page) {
     const cookies = await page.cookies();
     return {
         ...REQUESTS_HEADERS,
-        'Cookie':cookies.map(c => `${c.name}=${c.value}`).join('; ')
+        'Cookie': cookies.map(c => `${c.name}=${c.value}`).join('; ')
     };
 }
 

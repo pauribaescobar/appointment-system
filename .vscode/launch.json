@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Confirmation Sender",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/appointment-confirmation-sender",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Test Confirmation Sender",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/appointment-confirmation-sender",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "ENV": "test"
+      }
+    },
+    {
+      "name": "Debug Webhook",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/whatsapp-webhook",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}
